@@ -40,7 +40,10 @@
         <p id="outboxEmpty" class="muted">Nothing shared yet. Drop files into the outbox on the Mac's admin page.</p>
       </div>
 
-      <p class="muted" style="text-align:center;">Session expires in <span id="sessionTimer">–</span></p>
+      <div class="row" style="justify-content:center; margin-top:4px;">
+        <span class="muted">Session expires in <span id="sessionTimer">–</span></span>
+        <button id="disconnectBtn" class="secondary small">Disconnect</button>
+      </div>
     </div>
   </div>
 
@@ -174,6 +177,12 @@
       }
     }
     $('refreshBtn').addEventListener('click', loadOutbox);
+
+    $('disconnectBtn').addEventListener('click', async () => {
+      await fetch('/api/unpair', { method: 'POST' });
+      sessionEndsAt = 0;
+      showPinScreen('Disconnected. Enter the PIN on the Mac to reconnect.');
+    });
 
     // --- session countdown ---
     setInterval(() => {

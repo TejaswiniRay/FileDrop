@@ -18,7 +18,10 @@
       <div class="pin-display" id="pin">······</div>
       <p class="muted">Enter this PIN on the phone. It rotates after every pairing.</p>
       <button id="rotateBtn" class="secondary small">New PIN</button>
-      <p class="muted" style="margin-top:10px;">Active sessions: <span id="sessions">0</span></p>
+      <p class="muted" style="margin-top:10px;">
+        Active sessions: <span id="sessions">0</span>
+        <button id="endSessionsBtn" class="secondary small" style="margin-left:8px;">End all sessions</button>
+      </p>
     </div>
 
     <div class="card">
@@ -96,6 +99,11 @@
 
     $('rotateBtn').addEventListener('click', async () => {
       await fetch('/api/admin/rotate-pin', { method: 'POST' });
+      refresh();
+    });
+
+    $('endSessionsBtn').addEventListener('click', async () => {
+      await fetch('/api/admin/end-sessions', { method: 'POST' });
       refresh();
     });
 

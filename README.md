@@ -45,6 +45,8 @@ Tip: in Chrome on the phone, ⋮ → *Add to Home screen* gives you an app icon.
   PIN comparison is constant-time.
 - **Short-lived sessions** — pairing grants a random 256-bit token in an
   `HttpOnly; SameSite=Strict` cookie, valid for 15 minutes. After that, re-pair with a new PIN.
+- **End a session early** — *Disconnect* on the phone, or *End all sessions* on the Mac's
+  admin page (which also rotates the PIN), revokes access immediately.
 - **Admin is localhost-only** — the page showing the PIN, QR code, and received files
   rejects any request not coming from the Mac itself.
 - **Path safety** — uploaded filenames are sanitized (no traversal, no control chars) and

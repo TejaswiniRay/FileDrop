@@ -200,6 +200,14 @@ app.post('/api/pair', (req, res) => {
   return res.status(401).json({ error: 'wrong PIN' });
 });
 
+app.post('/api/unpair', (req, res) => {
+  const cookies = req.headers.cookie || '';
+  const match = cookies.match(/(?:^|;\s*)fd_session=([a-f0-9]{64})/);
+  if (match && sessions.delete(match[1])) console.log(`  Unpaired: ${clientIp(req)}`);
+  res.setHeader('Set-Cookie', 'fd_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
+
 app.get('/api/session', (req, res) => {
   const session = getSession(req);
   if (!session) return res.status(401).json({ error: 'not paired' });
@@ -253,6 +261,16 @@ app.get('/api/admin/status', requireLocalhost, async (req, res) => {
 app.post('/api/admin/rotate-pin', requireLocalhost, (req, res) => {
   rotatePin('rotated manually');
   res.json({ ok: true, pin: getPin().code });
+});
+
+app.post('/api/admin/end-sessions', requireLocalhost, (req, res) => {
+  const ended = sessions.size;
+  sessions.clear();
+  if (ended > 0) {
+    rotatePin('all sessions ended from admin');
+    console.log(`  Ended ${ended} session(s) from admin`);
+  }
+  res.json({ ok: true, ended });
 });
 
 const outboxUpload = makeUploader(OUTBOX_DIR);
