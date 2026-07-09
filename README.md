@@ -10,7 +10,7 @@ A small server runs on the Mac. The phone opens a web page in Chrome — nothing
 install. Pairing requires the 6-digit PIN shown only on the Mac.
 
 ```
-┌─────────── Mac ───────────┐         ┌────────── Pixel ──────────┐
+┌─────────── Mac ───────────┐         ┌───────── Android ─────────┐
 │ node server.js            │  Wi-Fi  │ Chrome → http://mac-ip    │
 │ localhost:8090/admin      │ ◄─────► │ enter PIN → send/receive  │
 │ shows PIN + QR code       │         │                           │
@@ -27,7 +27,7 @@ install. Pairing requires the 6-digit PIN shown only on the Mac.
    ```
 
 2. Open **http://localhost:8090/admin** on the Mac — it shows a QR code and the current PIN.
-3. Scan the QR code with the Pixel camera (or type the URL into Chrome).
+3. Scan the QR code with your phone's camera (or type the URL into any browser).
 4. Enter the PIN from the Mac's screen on the phone.
 5. Transfer:
    - **Phone → Mac**: tap *Send to Mac*, pick files. They land in `~/Downloads/FileDrop`.
