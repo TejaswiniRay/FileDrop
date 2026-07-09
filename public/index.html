@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FileDrop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>📁 FileDrop</h1>
+    <p class="sub">Transfer files with the Mac on this network</p>
+
+    <!-- PIN gate -->
+    <div id="pinScreen" class="card">
+      <h2>Enter the PIN shown on the Mac</h2>
+      <input id="pinInput" class="pin-input" type="tel" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="6" pattern="\d*" placeholder="······" autofocus />
+      <p id="pinError" class="error"></p>
+      <button id="pairBtn" style="width:100%; margin-top:8px;">Connect</button>
+    </div>
+
+    <!-- Main app -->
+    <div id="app" class="hidden">
+      <div class="card">
+        <h2>Send to Mac</h2>
+        <div id="sendDrop" class="drop">Tap to choose files<br /><span class="muted">or drop them here</span></div>
+        <input id="fileInput" type="file" multiple class="hidden" />
+        <div id="uploadProgress" class="progress"><div></div></div>
+        <p id="sendStatus" class="muted" style="margin:10px 0 0;"></p>
+      </div>
+
+      <div class="card">
+        <div class="row" style="margin-bottom:12px;">
+          <h2 style="margin:0;">From Mac</h2>
+          <span class="spacer"></span>
+          <button id="refreshBtn" class="secondary small">Refresh</button>
+        </div>
+        <ul id="outboxList" class="filelist"></ul>
+        <p id="outboxEmpty" class="muted">Nothing shared yet. Drop files into the outbox on the Mac's admin page.</p>
+      </div>
+
+      <p class="muted" style="text-align:center;">Session expires in <span id="sessionTimer">–</span></p>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let sessionEndsAt = 0;
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      const units = ['KB', 'MB', 'GB'];
+      let value = bytes, i = -1;
+      do { value /= 1024; i++; } while (value >= 1024 && i < units.length - 1);
+      return value.toFixed(value < 10 ? 1 : 0) + ' ' + units[i];
+    }
+
+    function showApp() {
+      $('pinScreen').classList.add('hidden');
+      $('app').classList.remove('hidden');
+      loadOutbox();
+    }
+
+    function showPinScreen(message) {
+      $('app').classList.add('hidden');
+      $('pinScreen').classList.remove('hidden');
+      $('pinInput').value = '';
+      $('pinError').textContent = message || '';
+    }
+
+    async function pair() {
+      const pin = $('pinInput').value.trim();
+      if (!/^\d{6}$/.test(pin)) {
+        $('pinError').textContent = 'Enter the 6-digit PIN';
+        return;
+      }
+      $('pairBtn').disabled = true;
+      try {
+        const res = await fetch('/api/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          sessionEndsAt = Date.now() + data.expiresInSec * 1000;
+          showApp();
+        } else {
+          $('pinError').textContent = data.error || 'Pairing failed';
+          $('pinInput').value = '';
+        }
+      } catch {
+        $('pinError').textContent = 'Cannot reach the Mac — same Wi-Fi?';
+      }
+      $('pairBtn').disabled = false;
+    }
+
+    $('pairBtn').addEventListener('click', pair);
+    $('pinInput').addEventListener('input', () => {
+      if ($('pinInput').value.length === 6) pair();
+    });
+
+    // --- upload ---
+    $('sendDrop').addEventListener('click', () => $('fileInput').click());
+    $('fileInput').addEventListener('change', () => upload($('fileInput').files));
+    $('sendDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('sendDrop').classList.add('hover'); });
+    $('sendDrop').addEventListener('dragleave', () => $('sendDrop').classList.remove('hover'));
+    $('sendDrop').addEventListener('drop', (e) => {
+      e.preventDefault();
+      $('sendDrop').classList.remove('hover');
+      upload(e.dataTransfer.files);
+    });
+
+    function upload(files) {
+      if (!files.length) return;
+      const form = new FormData();
+      for (const f of files) form.append('files', f);
+
+      const xhr = new XMLHttpRequest();
+      const bar = $('uploadProgress');
+      bar.style.display = 'block';
+      $('sendStatus').textContent = 'Uploading…';
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) bar.firstElementChild.style.width = (e.loaded / e.total) * 100 + '%';
+      });
+      xhr.addEventListener('load', () => {
+        bar.style.display = 'none';
+        bar.firstElementChild.style.width = '0';
+        $('fileInput').value = '';
+        if (xhr.status === 200) {
+          const saved = JSON.parse(xhr.responseText).saved;
+          $('sendStatus').innerHTML = '<span class="ok">✓ Sent ' + saved.length + ' file' + (saved.length > 1 ? 's' : '') + ' to the Mac</span>';
+        } else if (xhr.status === 401) {
+          showPinScreen('Session expired — enter the new PIN shown on the Mac');
+        } else {
+          $('sendStatus').textContent = 'Upload failed (' + xhr.status + ')';
+        }
+      });
+      xhr.addEventListener('error', () => {
+        bar.style.display = 'none';
+        $('sendStatus').textContent = 'Upload failed — connection lost';
+      });
+      xhr.open('POST', '/api/upload');
+      xhr.send(form);
+    }
+
+    // --- outbox ---
+    async function loadOutbox() {
+      const res = await fetch('/api/outbox');
+      if (res.status === 401) return showPinScreen('Session expired — enter the new PIN shown on the Mac');
+      const { files } = await res.json();
+      const list = $('outboxList');
+      list.innerHTML = '';
+      $('outboxEmpty').style.display = files.length ? 'none' : 'block';
+      for (const f of files) {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '/api/download?name=' + encodeURIComponent(f.name);
+        link.download = f.name;
+        const btn = document.createElement('button');
+        btn.className = 'small';
+        btn.textContent = 'Download';
+        link.appendChild(btn);
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = f.name;
+        const size = document.createElement('span');
+        size.className = 'size';
+        size.textContent = fmtSize(f.size);
+        li.append(name, size, link);
+        list.appendChild(li);
+      }
+    }
+    $('refreshBtn').addEventListener('click', loadOutbox);
+
+    // --- session countdown ---
+    setInterval(() => {
+      if (!sessionEndsAt || $('app').classList.contains('hidden')) return;
+      const left = Math.max(0, Math.floor((sessionEndsAt - Date.now()) / 1000));
+      $('sessionTimer').textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+      if (left === 0) showPinScreen('Session expired — enter the new PIN shown on the Mac');
+    }, 1000);
+
+    // resume an existing session on reload
+    fetch('/api/session').then(async (res) => {
+      if (res.ok) {
+        const data = await res.json();
+        sessionEndsAt = Date.now() + data.expiresInSec * 1000;
+        showApp();
+      }
+    });
+  </script>
+</body>
+</html>

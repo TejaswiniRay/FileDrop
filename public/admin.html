@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FileDrop — Mac</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>📁 FileDrop — Mac</h1>
+    <p class="sub">This page only works on this Mac (localhost)</p>
+
+    <div class="card" style="text-align:center;">
+      <h2 style="text-align:left;">Pair your phone</h2>
+      <img id="qr" class="qr" alt="QR code" width="220" height="220" />
+      <p class="muted">Scan with the Pixel camera, or open <code class="url" id="url">…</code></p>
+      <div class="pin-display" id="pin">······</div>
+      <p class="muted">Enter this PIN on the phone. It rotates after every pairing.</p>
+      <button id="rotateBtn" class="secondary small">New PIN</button>
+      <p class="muted" style="margin-top:10px;">Active sessions: <span id="sessions">0</span></p>
+    </div>
+
+    <div class="card">
+      <h2>Outbox — files the phone can download</h2>
+      <div id="shareDrop" class="drop">Drop files here to share them<br /><span class="muted">or click to choose</span></div>
+      <input id="shareInput" type="file" multiple class="hidden" />
+      <ul id="outboxList" class="filelist" style="margin-top:12px;"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Received from phone</h2>
+      <p class="muted" id="receivedDir"></p>
+      <ul id="receivedList" class="filelist"></ul>
+      <p id="receivedEmpty" class="muted">Nothing received yet.</p>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function fmtSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      const units = ['KB', 'MB', 'GB'];
+      let value = bytes, i = -1;
+      do { value /= 1024; i++; } while (value >= 1024 && i < units.length - 1);
+      return value.toFixed(value < 10 ? 1 : 0) + ' ' + units[i];
+    }
+
+    async function refresh() {
+      const res = await fetch('/api/admin/status');
+      if (!res.ok) return;
+      const s = await res.json();
+      $('pin').textContent = s.pin;
+      $('url').textContent = s.url;
+      $('qr').src = s.qr;
+      $('sessions').textContent = s.activeSessions;
+      $('receivedDir').textContent = s.receivedDir;
+
+      const outbox = $('outboxList');
+      outbox.innerHTML = '';
+      for (const f of s.outbox) {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = f.name;
+        const size = document.createElement('span');
+        size.className = 'size';
+        size.textContent = fmtSize(f.size);
+        const del = document.createElement('button');
+        del.className = 'secondary small';
+        del.textContent = 'Remove';
+        del.onclick = async () => {
+          await fetch('/api/admin/outbox/' + encodeURIComponent(f.name), { method: 'DELETE' });
+          refresh();
+        };
+        li.append(name, size, del);
+        outbox.appendChild(li);
+      }
+
+      const received = $('receivedList');
+      received.innerHTML = '';
+      $('receivedEmpty').style.display = s.received.length ? 'none' : 'block';
+      for (const f of s.received) {
+        const li = document.createElement('li');
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = f.name;
+        const size = document.createElement('span');
+        size.className = 'size';
+        size.textContent = fmtSize(f.size);
+        li.append(name, size);
+        received.appendChild(li);
+      }
+    }
+
+    $('rotateBtn').addEventListener('click', async () => {
+      await fetch('/api/admin/rotate-pin', { method: 'POST' });
+      refresh();
+    });
+
+    $('shareDrop').addEventListener('click', () => $('shareInput').click());
+    $('shareInput').addEventListener('change', () => share($('shareInput').files));
+    $('shareDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('shareDrop').classList.add('hover'); });
+    $('shareDrop').addEventListener('dragleave', () => $('shareDrop').classList.remove('hover'));
+    $('shareDrop').addEventListener('drop', (e) => {
+      e.preventDefault();
+      $('shareDrop').classList.remove('hover');
+      share(e.dataTransfer.files);
+    });
+
+    async function share(files) {
+      if (!files.length) return;
+      const form = new FormData();
+      for (const f of files) form.append('files', f);
+      await fetch('/api/admin/share', { method: 'POST', body: form });
+      $('shareInput').value = '';
+      refresh();
+    }
+
+    refresh();
+    setInterval(refresh, 4000);
+  </script>
+</body>
+</html>
